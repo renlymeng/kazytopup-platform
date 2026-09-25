@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  DELIVERING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REVIEW
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(ADMIN)
+  mfaSecret    String? // AES-256-GCM encrypted
+  mfaEnabled   Boolean   @default(false)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime  @default(now())
+  audits       AuditLog[]
+}
+
+model Member {
+  id         String   @id @default(cuid())
+  googleId   String?  @unique
+  telegramId String?  @unique
+  name       String
+  createdAt  DateTime @default(now())
+  orders     Order[]
+}
+
+model Game {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  nameEn         String
+  nameKm         String?
+  iconUrl        String
+  bannerUrl      String?
+  enabled        Boolean  @default(true)
+  hot            Boolean  @default(false)
+  instant        Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  idLabelEn      String   @default("Player ID")
+  idLabelKm      String   @default("លេខសម្គាល់អ្នកលេង")
+  idMin          Int      @default(5)
+  idMax          Int      @default(15)
+  idNumeric      Boolean  @default(true)
+  needsServerId  Boolean  @default(false)
+  serverMax      Int      @default(6)
+  lookupConfig   Json?
+  deliveryConfig Json?
+  updatedAt      DateTime @updatedAt
+  packages       Package[]
+  orders         Order[]
+
+  @@index([enabled, sortOrder])
+}
+
+model Package {
+  id          String  @id @default(cuid())
+  gameId      String
+  game        Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  labelEn     String
+  labelKm     String?
+  priceCents  Int
+  supplierSku String
+  enabled     Boolean @default(true)
+  sortOrder   Int     @default(0)
+  orders      Order[]
+
+  @@index([gameId, enabled])
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  ref            String      @unique
+  idempotencyKey String?     @unique
+  gameId         String
+  game           Game        @relation(fields: [gameId], references: [id])
+  packageId      String
+  package        Package     @relation(fields: [packageId], references: [id])
+  memberId       String?
+  member         Member?     @relation(fields: [memberId], references: [id])
+  playerId       String
+  serverId       String?
+  nickname       String
+  contact        String?
+  amountCents    Int
+  currency       String      @default("USD")
+  status         OrderStatus @default(PENDING)
+  attempts       Int         @default(0)
+  lastError      String?
+  supplierRef    String?
+  createdAt      DateTime    @default(now())
+  expiresAt      DateTime
+  paidAt         DateTime?
+  deliveredAt    DateTime?
+  payment        Payment?
+
+  @@index([status, createdAt])
+  @@index([playerId])
+  @@index([memberId])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String        @unique
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider    String        @default("PAYWAY_KHQR")
+  tranId      String        @unique
+  amountCents Int
+  status      PaymentStatus @default(PENDING)
+  qrString    String?
+  qrImage     String?
+  deeplink    String?
+  raw         Json?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  eventId    String
+  receivedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  adminId   String
+  admin     AdminUser @relation(fields: [adminId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  meta      Json?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+}

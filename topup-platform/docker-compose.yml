@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: topup, POSTGRES_PASSWORD: topup, POSTGRES_DB: topup }
+    volumes: [pgdata:/var/lib/postgresql/data]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+  api:
+    build: ./backend
+    env_file: ./backend/.env
+    ports: ["4000:4000"]
+    depends_on: [db, redis]
+  worker:
+    build: ./backend
+    env_file: ./backend/.env
+    command: ["node", "dist/src/worker/worker.js"]
+    depends_on: [db, redis]
+volumes: { pgdata: {}, redisdata: {} }
